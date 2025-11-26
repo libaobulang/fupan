@@ -5,6 +5,7 @@ import re
 import os
 import argparse
 from datetime import datetime
+import akshare as ak
 
 pattern = r"\[\d{8}\]"
 
@@ -43,38 +44,48 @@ def extract_indices(df):
     return res
 
 def fetch_indices(date):
-    q = f'{date}上证指数涨跌幅,深证成指涨跌幅,创业板指涨跌幅'
-    try:
-        r = pywencai.get(query=q, loop=True)
-    except Exception:
-        r = None
-    if isinstance(r, pd.DataFrame) and not r.empty:
-        return extract_indices(r)
-    if isinstance(r, list) and len(r) > 0 and isinstance(r[0], pd.DataFrame) and not r[0].empty:
-        return extract_indices(r[0])
-    def single(name):
-        try:
-            rr = pywencai.get(query=f'{date}{name}涨跌幅', loop=True)
-            if isinstance(rr, pd.DataFrame) and not rr.empty:
-                rr = clean_columns(rr)
-                pc = next((c for c in rr.columns if '涨跌幅' in str(c)), None)
-                if pc:
-                    return to_num(rr[pc].iloc[0])
-            d_dash = datetime.strptime(date, '%Y%m%d').strftime('%Y-%m-%d')
-            rr2 = pywencai.get(query=f'{d_dash}{name}涨跌幅', loop=True)
-            if isinstance(rr2, pd.DataFrame) and not rr2.empty:
-                rr2 = clean_columns(rr2)
-                pc2 = next((c for c in rr2.columns if '涨跌幅' in str(c)), None)
-                if pc2:
-                    return to_num(rr2[pc2].iloc[0])
-        except Exception:
-            pass
-        return np.nan
-    return {
-        '上证指数涨跌幅': single('上证指数'),
-        '深证成指涨跌幅': single('深证成指'),
-        '创业板指涨跌幅': single('创业板指'),
+    """使用 AkShare 获取指定日期的指数涨跌幅和成交额"""
+    result = {
+        '上证指数涨跌幅': np.nan,
+        '深证成指涨跌幅': np.nan,
+        '创业板指涨跌幅': np.nan,
+        'A股总成交额': np.nan,
     }
+    
+    sh_amount = 0
+    sz_amount = 0
+    
+    # 获取上证指数数据
+    try:
+        df_sh = ak.index_zh_a_hist(symbol="000001", period="daily", start_date=date, end_date=date)
+        if not df_sh.empty:
+            result['上证指数涨跌幅'] = to_num(df_sh['涨跌幅'].iloc[0])
+            sh_amount = to_num(df_sh['成交额'].iloc[0]) / 100000000  # 转换为亿元
+    except Exception as e:
+        print(f'获取上证指数失败: {e}')
+    
+    # 获取深证成指数据
+    try:
+        df_sz = ak.index_zh_a_hist(symbol="399001", period="daily", start_date=date, end_date=date)
+        if not df_sz.empty:
+            result['深证成指涨跌幅'] = to_num(df_sz['涨跌幅'].iloc[0])
+            sz_amount = to_num(df_sz['成交额'].iloc[0]) / 100000000  # 转换为亿元
+    except Exception as e:
+        print(f'获取深证成指失败: {e}')
+    
+    # 获取创业板指数据
+    try:
+        df_cyb = ak.index_zh_a_hist(symbol="399006", period="daily", start_date=date, end_date=date)
+        if not df_cyb.empty:
+            result['创业板指涨跌幅'] = to_num(df_cyb['涨跌幅'].iloc[0])
+    except Exception as e:
+        print(f'获取创业板指失败: {e}')
+    
+    # 计算A股总成交额(上证+深证)
+    if sh_amount > 0 or sz_amount > 0:
+        result['A股总成交额'] = sh_amount + sz_amount
+    
+    return result
 
 def fetch_breadth(date):
     q = f'{date}涨停家数,跌停家数,上涨家数,下跌家数'

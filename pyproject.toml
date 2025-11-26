@@ -1,0 +1,12 @@
+[project]
+name = "fupan"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.9"
+dependencies = [
+    "akshare>=1.17.88",
+    "baostock>=0.8.9",
+    "numpy>=2.0.2",
+    "pandas>=2.3.3",
+    "pywencai>=0.13.1",
+]
