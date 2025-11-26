@@ -1,0 +1,108 @@
+复盘项目使用方法（简版）
+
+一、市场情绪更新
+1）当日写入统一文件：
+uv run -m fupan.fupan --update-market --date YYYYMMDD
+2）统一文件路径：
+d:\gupiao\fupan\cache_market\市场情绪.csv
+
+二、板块资金与涨幅更新
+1）近三日自动更新：
+uv run -m fupan.fupan --update-board --date YYYYMMDD
+2）探测与导入（用于补齐名称与列）：
+保存探测结果：
+uv run -m fupan.fupan --probe-zhishu --date YYYYMMDD
+导入完善主CSV：
+uv run -m fupan.fupan --ingest-probe-zhishu --date YYYYMMDD
+3）输出文件路径：
+d:\gupiao\fupan\板块资金与涨幅.csv
+
+三、报告生成
+1）抓取并增强生成（含持仓分析）：
+uv run -m fupan.fupan --date YYYYMMDD
+2）仅用缓存生成（不发起在线查询）：
+uv run -m fupan.fupan --cache-only --date YYYYMMDD
+3）报告输出路径：
+d:\gupiao\fupan\每日分析报告YYYYMMDD.md
+4）自动复制：
+生成后自动复制到 D:\obsidian\股票\历史记录\每日分析报告YYYYMMDD.md
+
+四、持仓集成
+1）文件位置：
+d:\gupiao\fupan\持仓股票.csv
+2）格式：
+日期,股票名称
+示例：
+20251118,华胜天成
+20251117,海峡创新
+3）说明：
+当日持仓会与涨停数据匹配；不在涨停池的持仓将额外查询并合并到增强数据与报告。
+
+五、快速流程（当日）
+1）获取当日市场情绪（统一文件）：
+uv run -m fupan.fupan --update-market --date YYYYMMDD
+2）获取当日板块数据（探测→导入→聚合）：
+uv run -m fupan.fupan --probe-zhishu --date YYYYMMDD
+uv run -m fupan.fupan --ingest-probe-zhishu --date YYYYMMDD
+uv run -m fupan.fupan --update-board --date YYYYMMDD
+3）生成当日报告（使用缓存数据）：
+uv run -m fupan.fupan --cache-only --date YYYYMMDD
+4）示例（20251118）：
+uv run -m fupan.fupan --update-market --date 20251118
+uv run -m fupan.fupan --probe-zhishu --date 20251118
+uv run -m fupan.fupan --ingest-probe-zhishu --date 20251118
+uv run -m fupan.fupan --update-board --date 20251118
+uv run -m fupan.fupan --cache-only --date 20251118
+
+接口不稳定时，优先执行“探测→导入→聚合”来补齐板块名称与资金列。
+
+六、更新要点与常见问题
+1）市场情绪总成交额：
+统一文件缺失“A股总成交额(元)”时，自动从当日板块总成交额回填（优先使用“同花顺全A(沪深京)”行），报告按亿展示。
+2）探测列兼容：
+probe_zhishu.py 的代码列支持“指数代码/code/market_code”回退，确保指数名码可正确合并与排序。
+3）板块资金趋势为空：
+先执行“探测→导入→聚合”，再生成报告；强/弱势榜仅显示关键字段完整的板块（空字段板块不参与显示）。
+4）复制与查阅：
+报告生成后会自动复制到 Obsidian 历史记录目录，便于统一查阅。
+
+七、评分权重与分档配置（可调）
+1）配置文件路径：
+d:\gupiao\fupan\concept_config.json
+2）可调参数：
+score_weights：综合评分四维权重（tech/money/concept/board）
+grade_thresholds：等级阈值（D/C/B/A/S）
+blacklist：概念黑名单（剔除非主题标签）
+pct_div、amt_scale、amt_div、hot_score_min、hot_topn：概念热度权重与筛选
+3）生效范围：
+综合评分与等级分档、概念热度加权与热门概念筛选均由此配置控制；修改后直接生成报告即可生效。
+
+八、主线龙头/跟风逻辑（报告内新增）
+1）主线板块：按当日“涨跌幅/增量成交/主力净流入”的z分数加权选取前5主线板块。
+2）归属规则：优先以“所属概念”命中主线板块名称；未命中再以“所属同花顺行业”匹配。
+3）龙头阈值：严格≥2板，首板不作为主线龙头；表格显示“归属板块/归属类型/判定原因”。
+4）跟风梯队：同板块按“连板数→评分”降序选2-6名，去重后展示“归属板块/归属类型”。
+
+九、回测脚手架（只读）
+1）脚本路径：
+d:\gupiao\fupan\backtest.py
+2）用途：
+读取“增强涨停YYYYMMDD.csv”，在相邻两日之间评估次日延续与回撤，支持多权重对比。
+3）示例：
+python -m fupan.backtest --dates 20251118,20251119
+python -m fupan.backtest --dates 20251118,20251119 --weights '[{"tech":0.25,"money":0.45,"concept":0.20,"board":0.10}]'
+4）保存结果：
+python -m fupan.backtest --dates 20251118,20251119 --out d:\gupiao\fupan\backtest_result.csv
+说明：仅在提供 --out 时写入CSV；默认只打印，不改动任何现有文件。
+
+十、只用缓存生成（安全）
+1）命令：
+python -m fupan.fupan --cache-only --date YYYYMMDD
+2）作用：
+不发起在线查询，仅使用本地缓存与探测导入结果生成报告；推荐在网络或接口不稳定时使用。
+
+十一、持仓决策清单（可选）
+1）来源：
+报告“操作建议/仓位分档+主线龙头/跟风梯队”联合生成；基于情绪分数与分时代理因子（换手、封单占比）。
+2）执行：
+按“高开强冲/高开回落/平开走强/低开弱走”四情景提供减仓/加仓/清仓的触发条件与动作。
