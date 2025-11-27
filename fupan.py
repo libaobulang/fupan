@@ -2417,17 +2417,6 @@ def calculate_comprehensive_score(df):
     df['综合评分'] = scores
     th = CONCEPT_CFG.get('grade_thresholds', {'D':40,'C':60,'B':75,'A':90,'S':100})
     df['评分等级'] = pd.cut(df['综合评分'],
-                          bins=[0, float(th.get('D',40)), float(th.get('C',60)), float(th.get('B',75)), float(th.get('A',90)), float(th.get('S',100))],
-                          labels=['D', 'C', 'B', 'A', 'S'])
-    
-    return df
-
-def generate_daily_analysis_report(df, date, market_data, df_down=None):
-    if market_data is not None and not market_data.empty:
-        market_row = market_data.iloc[0]
-        def fmt_pct(v):
-            try:
-                v2 = pd.to_numeric(v, errors='coerce')
                 return f"{v2:.2f}" if pd.notna(v2) else 'N/A'
             except Exception:
                 return 'N/A'
