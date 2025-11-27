@@ -87,6 +87,114 @@ def fetch_indices(date):
     
     return result
 
+def fetch_market_zhishu(date):
+    """使用综合查询获取市场情绪数据(包括指数涨跌幅、成交额、涨跌停家数等)"""
+    result = {
+        '上证指数涨跌幅': np.nan,
+        '深证成指涨跌幅': np.nan,
+        '创业板指涨跌幅': np.nan,
+        'A股总成交额': np.nan,
+        '上涨家数': np.nan,
+        '下跌家数': np.nan,
+        '平盘家数': np.nan,
+        '涨停家数': np.nan,
+        '跌停家数': np.nan,
+    }
+    
+    query = f"{date}日上证指数涨跌幅,{date}日深证成指涨跌幅,{date}日创业板指涨跌幅,{date}日同花顺全A(沪深京)的涨停家数,{date}日跌停家数,{date}日上涨家数,{date}日下跌家数,{date}日平盘家数,{date}日A股总成交额"
+    
+    try:
+        r = pywencai.get(query=query, query_type='zhishu', loop=True)
+        
+        # 处理返回结果可能是字典或列表的情况
+        if isinstance(r, dict):
+            # 如果是字典，尝试获取第一个DataFrame值
+            for v in r.values():
+                if isinstance(v, pd.DataFrame):
+                    r = v
+                    break
+        elif isinstance(r, list) and len(r) > 0:
+            # 如果是列表，尝试获取第一个DataFrame项
+            if isinstance(r[0], pd.DataFrame):
+                r = r[0]
+        
+        if isinstance(r, pd.DataFrame) and not r.empty:
+            r = clean_columns(r)
+            
+            # 调试打印到文件
+            print("DEBUG: 开始写入调试日志...")
+            try:
+                log_path = os.path.join(os.path.dirname(__file__), 'debug_log.txt')
+                with open(log_path, 'w', encoding='utf-8') as f:
+                    f.write(f"DEBUG: Columns: {r.columns.tolist()}\n")
+                    
+                    # 遍历每一行数据
+                    for idx, row in r.iterrows():
+                        # 获取指数代码或名称来判断是哪一行
+                        code = str(row.get('指数代码', ''))
+                        name = str(row.get('指数简称', ''))
+                        f.write(f"DEBUG: Row {idx}: Code={code}, Name={name}\n")
+                        for c in r.columns:
+                            f.write(f"  {c}: {row[c]}\n")
+                print(f"DEBUG: 调试日志已写入: {log_path}")
+            except Exception as e:
+                print(f"写入调试日志失败: {e}")
+
+            # 遍历每一行数据
+            for idx, row in r.iterrows():
+                # 获取指数代码或名称来判断是哪一行
+                code = str(row.get('指数代码', ''))
+                name = str(row.get('指数简称', ''))
+                
+                # 提取同花顺全A的数据 (883957)
+                if '883957' in code or '同花顺全A' in name:
+                    # 提取成交额
+                    for c in r.columns:
+                        n = str(c)
+                        if '成交额' in n and '指数@成交额' in n:
+                            val = to_num(row[c])
+                            if pd.notna(val):
+                                result['A股总成交额'] = val / 100000000 # 转换为亿元
+                        elif '上涨家数' in n and '指数@上涨家数' in n:
+                            result['上涨家数'] = to_num(row[c])
+                        elif '下跌家数' in n and '指数@下跌家数' in n:
+                            result['下跌家数'] = to_num(row[c])
+                        elif '平盘家数' in n and '指数@平盘家数' in n:
+                            result['平盘家数'] = to_num(row[c])
+                        elif '涨停家数' in n and '指数@涨停家数' in n:
+                            result['涨停家数'] = to_num(row[c])
+                        elif '跌停家数' in n and '指数@跌停家数' in n:
+                            result['跌停家数'] = to_num(row[c])
+                            
+                # 提取上证指数数据 (000001)
+                elif '000001' in code or '上证指数' in name:
+                    for c in r.columns:
+                        if '涨跌幅' in str(c):
+                            result['上证指数涨跌幅'] = to_num(row[c])
+                            
+                # 提取深证成指数据 (399001)
+                elif '399001' in code or '深证成指' in name:
+                    for c in r.columns:
+                        if '涨跌幅' in str(c):
+                            result['深证成指涨跌幅'] = to_num(row[c])
+                            
+                # 提取创业板指数据 (399006)
+                elif '399006' in code or '创业板指' in name:
+                    for c in r.columns:
+                        if '涨跌幅' in str(c):
+                            result['创业板指涨跌幅'] = to_num(row[c])
+
+            print(f"zhishu查询成功:")
+            print(f"  指数涨跌幅: 上证={result['上证指数涨跌幅']}%, 深证={result['深证成指涨跌幅']}%, 创业板={result['创业板指涨跌幅']}%")
+            print(f"  市场情绪: 成交额={result['A股总成交额']:.2f}亿, 上涨={result['上涨家数']}, 下跌={result['下跌家数']}, 涨停={result['涨停家数']}, 跌停={result['跌停家数']}")
+            
+    except Exception as e:
+        print(f'zhishu查询失败: {e}')
+        import traceback
+        traceback.print_exc()
+    
+    return result
+
 def fetch_breadth(date):
     q = f'{date}涨停家数,跌停家数,上涨家数,下跌家数'
     up = down = dt = zt = np.nan
@@ -204,12 +312,13 @@ def main():
     if args.backfill_stocks:
         backfill_stocks(d)
     if not args.indices and not args.breadth:
-        idx = fetch_indices(d)
-        br = fetch_breadth(d)
-        data = {}
-        data.update(idx)
-        data.update(br)
-        out = merge_cache(d, data)
+        # 使用综合查询获取所有数据
+        market_data = fetch_market_zhishu(d)
+        
+        # 如果综合查询失败(关键数据缺失),尝试回退到旧方法(虽然旧方法已被移除,但为了兼容性保留接口调用结构,实际这里主要依赖综合查询)
+        # 注意: fetch_indices 和 fetch_breadth 函数仍保留在文件中,如果需要可以作为备选,但目前逻辑主要依赖 fetch_market_zhishu
+        
+        out = merge_cache(d, market_data)
         print(out.to_string(index=False))
 
 if __name__ == '__main__':
