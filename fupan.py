@@ -2417,6 +2417,150 @@ def calculate_comprehensive_score(df):
     df['综合评分'] = scores
     th = CONCEPT_CFG.get('grade_thresholds', {'D':40,'C':60,'B':75,'A':90,'S':100})
     df['评分等级'] = pd.cut(df['综合评分'],
+                          bins=[-1, th['D'], th['C'], th['B'], th['A'], 101],
+                          labels=['E', 'D', 'C', 'B', 'A'],
+                          include_lowest=True)
+    return df
+
+# ==================== 板块强弱分析函数 ====================
+def fetch_sector_strength_data(date):
+    """获取板块强弱分析所需数据"""
+    query = f"{date}同花顺指数当日成交额,{date}同花顺指数较上一交易日成交额,{date}同花顺指数近三交易日成交额,{date}同花顺指数涨停家数,{date}同花顺指数资金流向,{date}同花顺指数涨跌幅"
+    try:
+        r = pywencai.get(query=query, query_type='zhishu', loop=True)
+        df = None
+        if isinstance(r, pd.DataFrame):
+            df = r
+        elif isinstance(r, list) and len(r) > 0 and isinstance(r[0], pd.DataFrame):
+            df = r[0]
+        elif isinstance(r, dict) and 'tableV1' in r and isinstance(r['tableV1'], pd.DataFrame):
+            df = r['tableV1']
+        if isinstance(df, pd.DataFrame) and not df.empty:
+            return df
+        return None
+    except Exception:
+        return None
+
+def analyze_sector_strength(df, date):
+    """分析板块强弱"""
+    if df is None or df.empty:
+        return None
+    df = df.copy()
+    raw_cols = df.columns.tolist()
+    name_col = next((c for c in raw_cols if '指数名称' in c or '指数简称' in c), None)
+    code_col = next((c for c in raw_cols if '指数代码' in c), None)
+    try:
+        dt = datetime.strptime(str(date), '%Y%m%d')
+        date_str = dt.strftime('%Y%m%d')
+    except:
+        date_str = str(date)
+    amt_col = next((c for c in raw_cols if '成交额' in c and '区间' not in c and '较上一' not in c and '近三' not in c), None)
+    prev_amt_col = next((c for c in raw_cols if '较上一交易日成交额' in c or ('较上一' in c and '成交额' in c)), None)
+    three_day_amt_col = next((c for c in raw_cols if '近三交易日成交额' in c or ('近三' in c and '成交额' in c) or '区间成交额' in c), None)
+    zt_col = next((c for c in raw_cols if '涨停家数' in c), None)
+    flow_col = next((c for c in raw_cols if '资金流向' in c), None)
+    pct_col = next((c for c in raw_cols if '涨跌幅' in c), None)
+    
+    if not all([name_col, amt_col, three_day_amt_col, zt_col]):
+        return None
+    def to_num(v):
+        try:
+            s = str(v).replace(',','').replace('亿','').replace('万','')
+            return float(s)
+        except:
+            return 0.0
+    df['成交额'] = df[amt_col].apply(to_num)
+    df['昨成交额'] = df[prev_amt_col].apply(to_num) if prev_amt_col else df['成交额'] * 0.95  # Estimate if not available
+    df['近三日成交额'] = df[three_day_amt_col].apply(to_num)
+    df['涨停家数'] = df[zt_col].apply(to_num).fillna(0)
+    df['资金流向'] = df[flow_col].apply(to_num) if flow_col else 0.0
+    df['涨跌幅'] = df[pct_col].apply(to_num) if pct_col else 0.0
+    
+    df['成交额增幅'] = (df['成交额'] - df['昨成交额']) / (df['昨成交额'] + 1)
+    df['趋势强度'] = df['成交额'] / ((df['近三日成交额'] / 3) + 1)
+    def normalize(series):
+        return (series - series.min()) / (series.max() - series.min() + 1e-5)
+    df['涨停得分'] = normalize(df['涨停家数']) * 100
+    df['增幅得分'] = normalize(df['成交额增幅']) * 100
+    df['趋势得分'] = normalize(df['趋势强度']) * 100
+    df['强弱得分'] = df['涨停得分'] * 0.4 + df['增幅得分'] * 0.3 + df['趋势得分'] * 0.3
+    df = df.sort_values('强弱得分', ascending=False)
+    top_df = df.head(20).copy()
+    result_cols = [name_col, code_col, '强弱得分', '成交额', '成交额增幅', '涨停家数', '趋势强度', '资金流向', '涨跌幅']
+    return top_df[result_cols]
+
+def generate_sector_capital_report(df):
+    """生成板块资金方向报告"""
+    if df is None or df.empty:
+        return "\n无板块资金数据"
+    
+    # 确保有需要的列
+    cols = df.columns.tolist()
+    name_col = next((c for c in cols if '指数名称' in c or '指数简称' in c), None)
+    code_col = next((c for c in cols if '指数代码' in c), None)
+    
+    if not name_col:
+        return "\n数据缺失：无法识别指数名称"
+
+    lines = []
+    
+    # 资金净额榜
+    lines.append("\n### 板块资金净额榜")
+    lines.append("| 指数名称 | 指数代码 | 资金净额(亿) | 成交额(亿) | 涨跌幅(%) | 涨停家数 |")
+    lines.append("| --- | --- | --- | --- | --- | --- |")
+    
+    df_sorted = df.sort_values('资金流向', ascending=False).head(20)
+    for _, row in df_sorted.iterrows():
+        name = row[name_col]
+        code = row[code_col] if code_col else ''
+        flow = f"{row['资金流向']/1e8:.2f}"
+        amt = f"{row['成交额']/1e8:.2f}"
+        pct = f"{row['涨跌幅']:.2f}"
+        zt = int(row['涨停家数'])
+        lines.append(f"| {name} | {code} | {flow} | {amt} | {pct} | {zt} |")
+
+    # 涨幅榜
+    lines.append("\n### 板块涨幅榜")
+    lines.append("| 指数名称 | 指数代码 | 涨跌幅(%) | 成交额(亿) | 资金净额(亿) | 涨停家数 |")
+    lines.append("| --- | --- | --- | --- | --- | --- |")
+    
+    df_pct = df.sort_values('涨跌幅', ascending=False).head(20)
+    for _, row in df_pct.iterrows():
+        name = row[name_col]
+        code = row[code_col] if code_col else ''
+        flow = f"{row['资金流向']/1e8:.2f}"
+        amt = f"{row['成交额']/1e8:.2f}"
+        pct = f"{row['涨跌幅']:.2f}"
+        zt = int(row['涨停家数'])
+        lines.append(f"| {name} | {code} | {pct} | {amt} | {flow} | {zt} |")
+        
+    return "\n".join(lines)
+
+def format_sector_strength_report(df):
+    """格式化板块强弱分析报告"""
+    if df is None or df.empty:
+        return "\n无板块强弱数据"
+    lines = []
+    lines.append("\n### 板块强弱分析 (基于资金流向与涨停)")
+    lines.append("\n| 板块名称 | 强弱得分 | 成交额(亿) | 增幅(%) | 涨停家数 | 趋势强度 |")
+    lines.append("| --- | --- | --- | --- | --- | --- |")
+    for _, row in df.iterrows():
+        name = row.iloc[0]
+        score = f"{row['强弱得分']:.1f}"
+        amt = f"{row['成交额']/1e8:.2f}" if row['成交额'] > 1e8 else f"{row['成交额']/1e4:.0f}万"
+        growth = f"{row['成交额增幅']*100:.1f}"
+        zt = int(row['涨停家数'])
+        trend = f"{row['趋势强度']:.2f}"
+        lines.append(f"| {name} | {score} | {amt} | {growth} | {zt} | {trend} |")
+    return "\n".join(lines)
+
+def generate_daily_analysis_report(df, date, market_data, df_down=None):
+    """生成每日分析报告"""
+    if market_data is not None and not market_data.empty:
+        market_row = market_data.iloc[0]
+        def fmt_pct(v):
+            try:
+                v2 = pd.to_numeric(v, errors='coerce')
                 return f"{v2:.2f}" if pd.notna(v2) else 'N/A'
             except Exception:
                 return 'N/A'
@@ -2876,9 +3020,25 @@ def calculate_comprehensive_score(df):
         pass
     try:
         report_parts.append("\n## 板块资金方向（简明版）")
-        append_board_net_pct_sections(report_parts, date)
-    except Exception:
-        pass
+        # append_board_net_pct_sections(report_parts, date) # Deprecated
+        
+        # Fetch and generate fresh sector data
+        sector_df_raw = fetch_sector_strength_data(date)
+        if sector_df_raw is not None and not sector_df_raw.empty:
+            sector_analyzed = analyze_sector_strength(sector_df_raw, date)
+            if sector_analyzed is not None:
+                # Generate Capital Report
+                cap_report = generate_sector_capital_report(sector_analyzed)
+                report_parts.append(cap_report)
+                
+                # Generate Strength Report (Optional, or append elsewhere)
+                # strength_report = format_sector_strength_report(sector_analyzed)
+                # report_parts.append(strength_report)
+        else:
+             report_parts.append("\n无板块资金数据 (Fetch Failed)")
+
+    except Exception as e:
+        report_parts.append(f"\n板块资金数据生成出错: {e}")
     try:
         if '持仓' in df.columns and df['持仓'].any():
             hold_df = df[df['持仓'] == True]
@@ -3293,3 +3453,6 @@ if __name__ == '__main__':
             process_date(d)
             time.sleep(1)
         print('所有日期数据处理完成！')
+
+# ==================== 板块强弱分析函数 ====================
+
