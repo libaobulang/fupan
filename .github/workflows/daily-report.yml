@@ -1,0 +1,56 @@
+name: 生成每日分析报告
+
+on:
+  schedule:
+    # 每个交易日下午4点执行(北京时间16:00 = UTC 08:00)
+    - cron: '0 8 * * 1-5'
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+      
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: 安装uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        
+    - name: 安装依赖
+      run: |
+        uv sync
+        
+    - name: 生成当日报告
+      run: |
+        DATE=$(date +%Y%m%d)
+        echo "生成日期: $DATE"
+        uv run python fupan.py --date $DATE || echo "报告生成失败,但继续执行"
+      continue-on-error: true
+        
+    - name: 提交报告
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add reports/ data/ || true
+        git commit -m "自动生成报告 $(date +%Y%m%d)" || echo "没有变更"
+        git push || echo "推送失败"
+      continue-on-error: true
+        
+    - name: 部署到GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      if: success()
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./reports
+        publish_branch: gh-pages
+        enable_jekyll: false

@@ -1,2 +1,32 @@
-date/
-cache_market/
+# 添加部署相关文件到.gitignore
+*.pyc
+__pycache__/
+.venv/
+.python-version
+*.env
+.env.*
+
+# 保留配置文件但忽略敏感数据
+持仓股票.csv
+
+# 构建产物
+dist/
+build/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+
+# 临时文件
+*.tmp
+*.bak

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票复盘分析系统</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .subtitle {
+            color: #6c757d;
+            font-size: 1.1rem;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .search-box {
+            margin-bottom: 30px;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 1rem;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .report-list {
+            list-style: none;
+        }
+        
+        .report-item {
+            background: #f8f9fa;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+        
+        .report-item:hover {
+            transform: translateX(10px);
+            background: #e9ecef;
+            border-left-color: #667eea;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .report-link {
+            text-decoration: none;
+            color: #212529;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 500;
+        }
+        
+        .report-date {
+            color: #667eea;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+        
+        .report-arrow {
+            color: #667eea;
+            font-size: 1.5rem;
+            transition: transform 0.3s ease;
+        }
+        
+        .report-item:hover .report-arrow {
+            transform: translateX(5px);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+        
+        .empty-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 股票复盘分析系统</h1>
+            <p class="subtitle">每日市场分析 · 智能选股 · 数据驱动</p>
+        </header>
+        
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="totalReports">-</div>
+                <div class="stat-label">总报告数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="latestDate">-</div>
+                <div class="stat-label">最新日期</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="thisMonth">-</div>
+                <div class="stat-label">本月报告</div>
+            </div>
+        </div>
+        
+        <div class="search-box">
+            <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜索报告日期...">
+        </div>
+        
+        <div id="reports">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>正在加载报告列表...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 加载报告列表
+        async function loadReports() {
+            try {
+                // 尝试从GitHub Pages加载
+                const response = await fetch('reports.json');
+                let reports = [];
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    reports = data.reports || [];
+                } else {
+                    // 如果没有API,尝试解析目录
+                    reports = await parseReportsFromDirectory();
+                }
+                
+                displayReports(reports);
+                updateStats(reports);
+            } catch (error) {
+                console.error('加载报告失败:', error);
+                showEmptyState();
+            }
+        }
+        
+        async function parseReportsFromDirectory() {
+            // 这里可以添加逻辑来解析reports目录
+            // 暂时返回示例数据
+            return [];
+        }
+        
+        function displayReports(reports) {
+            const container = document.getElementById('reports');
+            
+            if (reports.length === 0) {
+                showEmptyState();
+                return;
+            }
+            
+            const list = document.createElement('ul');
+            list.className = 'report-list';
+            
+            reports.forEach(report => {
+                const item = document.createElement('li');
+                item.className = 'report-item';
+                
+                // 从文件名提取日期
+                const dateMatch = report.match(/(\d{8})/);
+                const date = dateMatch ? formatDate(dateMatch[1]) : report;
+                
+                item.innerHTML = `
+                    <a class="report-link" href="${report}">
+                        <span class="report-date">${date}</span>
+                        <span class="report-arrow">→</span>
+                    </a>
+                `;
+                list.appendChild(item);
+            });
+            
+            container.innerHTML = '';
+            container.appendChild(list);
+            
+            // 添加搜索功能
+            setupSearch(reports);
+        }
+        
+        function formatDate(dateStr) {
+            if (dateStr.length === 8) {
+                const year = dateStr.substring(0, 4);
+                const month = dateStr.substring(4, 6);
+                const day = dateStr.substring(6, 8);
+                return `${year}年${month}月${day}日`;
+            }
+            return dateStr;
+        }
+        
+        function updateStats(reports) {
+            document.getElementById('totalReports').textContent = reports.length;
+            
+            if (reports.length > 0) {
+                const dates = reports.map(r => r.match(/(\d{8})/)?.[1]).filter(Boolean);
+                dates.sort().reverse();
+                
+                if (dates.length > 0) {
+                    document.getElementById('latestDate').textContent = formatDate(dates[0]).replace('年', '/').replace('月', '/').replace('日', '');
+                    
+                    const currentMonth = new Date().toISOString().substring(0, 7).replace('-', '');
+                    const thisMonthCount = dates.filter(d => d.startsWith(currentMonth)).length;
+                    document.getElementById('thisMonth').textContent = thisMonthCount;
+                }
+            }
+        }
+        
+        function setupSearch(reports) {
+            const searchInput = document.getElementById('searchInput');
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+                const items = document.querySelectorAll('.report-item');
+                
+                items.forEach(item => {
+                    const text = item.textContent.toLowerCase();
+                    item.style.display = text.includes(query) ? 'block' : 'none';
+                });
+            });
+        }
+        
+        function showEmptyState() {
+            const container = document.getElementById('reports');
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">📭</div>
+                    <p>暂无报告数据</p>
+                    <p style="margin-top: 10px; font-size: 0.9rem;">请先运行分析脚本生成报告</p>
+                </div>
+            `;
+        }
+        
+        // 页面加载时执行
+        loadReports();
+    </script>
+</body>
+</html>
