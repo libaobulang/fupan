@@ -60,14 +60,14 @@ jobs:
         cp web/index.html reports/index.html
         # 创建reports.json
         cd reports
-        python3 << 'EOF'
-import json, glob, os
-reports = sorted([f for f in glob.glob("*.md") if os.path.isfile(f)], reverse=True)
-with open("reports.json", "w") as f:
-    json.dump({"reports": reports}, f)
-print(f"Found {len(reports)} reports")
-EOF
-        echo "Contents of reports directory:"
+        # 使用bash生成JSON
+        echo -n '{"reports":[' > reports.json
+        ls -1 *.md 2>/dev/null | sort -r | sed 's/.*/"&"/' | paste -sd, >> reports.json || true
+        echo ']}' >> reports.json
+        # 显示内容
+        echo "=== reports.json content ==="
+        cat reports.json
+        echo "=== Directory listing ==="
         ls -la
         
     - name: 部署到GitHub Pages
