@@ -55,20 +55,26 @@ jobs:
       run: |
         mkdir -p gh-pages
         # 复制Web界面
-        cp web/index.html gh-pages/
+        cp web/index.html gh-pages/index.html
         # 复制报告文件
-        if [ -d "reports" ] && [ "$(ls -A reports)" ]; then
-          cp -r reports/* gh-pages/ 2>/dev/null || true
+        if [ -d "reports" ]; then
+          find reports -name "*.md" -exec cp {} gh-pages/ \;
         fi
-        # 创建reports.json供Web界面使用
+        # 创建reports.json
         cd gh-pages
-        echo '{"reports":['$(ls *.md 2>/dev/null | sed 's/.*/"&"/' | paste -sd,)']}'> reports.json || echo '{"reports":[]}' > reports.json
+        python3 << 'EOF'
+        import json, glob
+        reports = sorted([f for f in glob.glob("*.md")], reverse=True)
+        with open("reports.json", "w") as f:
+            json.dump({"reports": reports}, f)
+        EOF
+        ls -la
         
     - name: 部署到GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
-      if: success()
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./gh-pages
         publish_branch: gh-pages
         enable_jekyll: false
+        force_orphan: true
