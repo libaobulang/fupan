@@ -52,8 +52,14 @@ Thumbs.db
 # data/
 # cache_market/
 # reports/
+快速部署指南.md
+免费部署方案.md
+配置与目录说明.txt
+使用说明.txt
 backtest_result.csv
 sector_analysis_today.txt
+vercel.json
+Dockerfile
 
 # IDE和编辑器
 .vscode/
