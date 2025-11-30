@@ -55,21 +55,6 @@ jobs:
       if: always()
       run: |
         # 确保reports目录存在
-        mkdir -p reports
-        # 复制Web界面到reports目录
-        cp web/index.html reports/index.html
-        # 创建reports.json
-        cd reports
-        # 使用bash生成JSON
-        echo -n '{"reports":[' > reports.json
-        ls -1 *.md 2>/dev/null | sort -r | sed 's/.*/"&"/' | paste -sd, >> reports.json || true
-        echo ']}' >> reports.json
-        # 显示内容
-        echo "=== reports.json content ==="
-        cat reports.json
-        echo "=== Directory listing ==="
-        ls -la
-        
     - name: 部署到GitHub Pages
       if: always()
       uses: peaceiris/actions-gh-pages@v3
