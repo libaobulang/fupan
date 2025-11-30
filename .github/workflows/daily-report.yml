@@ -6,6 +6,11 @@ on:
     - cron: '0 8 * * 1-5'
   workflow_dispatch: # 允许手动触发
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 jobs:
   generate-report:
     runs-on: ubuntu-latest
