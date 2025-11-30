@@ -8,6 +8,11 @@ on:
     # 每个交易日下午4点执行(北京时间16:00 = UTC 08:00)
     - cron: '0 8 * * 1-5'
   workflow_dispatch: # 允许手动触发
+    inputs:
+      report_date:
+        description: '报告日期 (YYYYMMDD, 留空则为当天)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -40,7 +45,12 @@ jobs:
         
     - name: 生成当日报告
       run: |
-        DATE=$(date +%Y%m%d)
+        # 优先使用输入的日期
+        DATE="${{ inputs.report_date }}"
+        # 如果输入为空,则使用当前日期
+        if [ -z "$DATE" ]; then
+          DATE=$(date +%Y%m%d)
+        fi
         echo "生成日期: $DATE"
         uv run python fupan.py --date $DATE || echo "报告生成失败,但继续执行"
       continue-on-error: true
