@@ -1,32 +1,67 @@
-# 添加部署相关文件到.gitignore
+# Python相关
 *.pyc
+*.pyo
+*.pyd
 __pycache__/
-.venv/
-.python-version
-*.env
-.env.*
-
-# 保留配置文件但忽略敏感数据
-持仓股票.csv
-
-# 构建产物
+*.so
+*.egg
+*.egg-info/
 dist/
 build/
-*.egg-info/
+.eggs/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# 虚拟环境
+.venv/
+venv/
+ENV/
+env/
+.python-version
 
-# 系统文件
-.DS_Store
-Thumbs.db
+# 环境变量和敏感配置
+*.env
+.env.*
+.envrc
 
-# 日志
-*.log
+# 敏感数据文件
+持仓股票.csv
+*_secret.json
+*_private.csv
 
-# 临时文件
+# 测试和调试文件
+test_*.py
+debug_*.py
+*_test.py
+*_debug.py
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# 临时和缓存文件
 *.tmp
 *.bak
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.log
+
+# 数据和报告(可选择性忽略)
+# 如果不想提交数据文件,取消下面的注释
+# data/
+# cache_market/
+# reports/
+backtest_result.csv
+sector_analysis_today.txt
+
+# IDE和编辑器
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# 其他临时文件
+patch_*.py
+probe_*.py
+generate_*.py
