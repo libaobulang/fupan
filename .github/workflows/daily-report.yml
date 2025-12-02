@@ -42,6 +42,29 @@ jobs:
     - name: 安装依赖
       run: |
         uv sync
+    
+    # ✅ 新增：先获取市场数据（更可靠）
+    - name: 获取市场情绪数据
+      run: |
+        # 优先使用输入的日期
+        DATE="${{ inputs.report_date }}"
+        # 如果输入为空,则使用当前日期
+        if [ -z "$DATE" ]; then
+          DATE=$(date +%Y%m%d)
+        fi
+        echo "获取市场数据: $DATE"
+        # 使用 fetch_market.py 获取数据（有 AkShare 备用，更可靠）
+        uv run python fetch_market.py --date $DATE || echo "数据获取失败,尝试继续"
+        # 显示数据文件状态
+        if [ -f "data/cache_market/市场情绪_${DATE}.csv" ]; then
+          echo "✅ 单日数据文件已生成"
+          cat "data/cache_market/市场情绪_${DATE}.csv"
+        fi
+        if [ -f "data/cache_market/市场情绪.csv" ]; then
+          echo "✅ 汇总数据文件已更新"
+          tail -n 5 data/cache_market/市场情绪.csv
+        fi
+      continue-on-error: true
         
     - name: 生成当日报告
       run: |
@@ -51,7 +74,8 @@ jobs:
         if [ -z "$DATE" ]; then
           DATE=$(date +%Y%m%d)
         fi
-        echo "生成日期: $DATE"
+        echo "生成报告: $DATE"
+        # 使用 --cache-only 模式，避免重复获取市场数据
         uv run python fupan.py --date $DATE || echo "报告生成失败,但继续执行"
       continue-on-error: true
         
@@ -67,27 +91,35 @@ jobs:
     - name: 准备GitHub Pages内容
       if: always()
       run: |
-        # 确保reports目录存在
-        mkdir -p reports
-        # 复制Web界面到reports目录
-        cp web/index.html reports/index.html
-        # 创建reports.json
-        cd reports
-        # 使用bash生成JSON
+        # 创建部署目录结构
+        mkdir -p deploy/reports deploy/data/cache_market
+        
+        # 复制报告文件
+        cp -r reports/*.md deploy/reports/ 2>/dev/null || true
+        
+        # ✅ 新增：复制市场情绪数据
+        cp data/cache_market/市场情绪.csv deploy/data/cache_market/ 2>/dev/null || true
+        
+        # 复制 Web 界面
+        cp web/index.html deploy/index.html
+        
+        # 生成 reports.json
+        cd deploy/reports
         echo -n '{"reports":[' > reports.json
         ls -1 *.md 2>/dev/null | sort -r | sed 's/.*/"&"/' | paste -sd, >> reports.json || true
         echo ']}' >> reports.json
-        # 显示内容
-        echo "=== reports.json content ==="
-        cat reports.json
-        echo "=== Directory listing ==="
-        ls -la
+        
+        # 显示部署内容
+        echo "=== 部署内容 ==="
+        cd ..
+        find . -type f
+        
     - name: 部署到GitHub Pages
       if: always()
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./reports
+        publish_dir: ./deploy  # ✅ 修改：使用 deploy 目录
         publish_branch: gh-pages
         enable_jekyll: false
         force_orphan: true

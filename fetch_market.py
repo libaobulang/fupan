@@ -10,18 +10,74 @@ import akshare as ak
 pattern = r"\[\d{8}\]"
 
 BASE_DIR = os.path.dirname(__file__)
-CACHE_DIR = os.path.join(BASE_DIR, 'cache_market')
-os.makedirs(CACHE_DIR, exist_ok=True)
+DATA_DIR = os.path.join(BASE_DIR, 'data')
+CACHE_DIR = os.path.join(DATA_DIR, 'cache_market')
+if not os.path.exists(CACHE_DIR):
+    os.makedirs(CACHE_DIR)
+
+def clean_columns(df):
+    if not isinstance(df, pd.DataFrame):
+        return df
+    df.columns = [re.sub(pattern, "", str(c)).strip() for c in df.columns]
+    return df
 
 def cache_path(date):
     return os.path.join(CACHE_DIR, f'市场情绪_{date}.csv')
 
 def enhanced_path(date):
-    return os.path.join(os.path.dirname(BASE_DIR), f'增强涨停{date}.csv')
+    return os.path.join(CACHE_DIR, f'市场情绪_增强_{date}.csv')
 
-def clean_columns(df):
-    df.columns = [re.sub(pattern, "", str(c)).strip() for c in df.columns]
-    return df
+def update_aggregated_cache():
+    rows = []
+    if not os.path.exists(CACHE_DIR):
+        return
+    for name in os.listdir(CACHE_DIR):
+        if name.startswith('市场情绪_') and name.endswith('.csv') and '增强' not in name:
+            p = os.path.join(CACHE_DIR, name)
+            try:
+                df = pd.read_csv(p, encoding='utf-8-sig')
+                date = name.replace('市场情绪_', '').replace('.csv', '')
+                df['日期'] = date
+                
+                # Handle Turnover Mapping and Unit Conversion (Billion -> Yuan)
+                if 'A股总成交额' in df.columns and 'A股总成交额(元)' not in df.columns:
+                     # Assuming A股总成交额 is in Billions (as per fetch_market.py logic)
+                     df['A股总成交额(元)'] = pd.to_numeric(df['A股总成交额'], errors='coerce') * 100000000
+                
+                # Calculate Sentiment Score if missing
+                if '情绪分数' not in df.columns:
+                    try:
+                        up = pd.to_numeric(df.get('上涨家数'), errors='coerce').iloc[0] if '上涨家数' in df.columns else np.nan
+                        down = pd.to_numeric(df.get('下跌家数'), errors='coerce').iloc[0] if '下跌家数' in df.columns else np.nan
+                        zt = pd.to_numeric(df.get('涨停家数'), errors='coerce').iloc[0] if '涨停家数' in df.columns else np.nan
+                        dt = pd.to_numeric(df.get('跌停家数'), errors='coerce').iloc[0] if '跌停家数' in df.columns else np.nan
+                        
+                        total = (up + down) if pd.notna(up) and pd.notna(down) else np.nan
+                        up_ratio = (up / (total + 1e-5)) if pd.notna(total) else np.nan
+                        sentiment = np.nan
+                        if pd.notna(up_ratio) and pd.notna(zt) and pd.notna(dt):
+                            sentiment = (up_ratio * 0.4 + min(max(zt / 100, 0), 1) * 0.3 + (1 - min(max(dt / 50, 0), 1)) * 0.3) * 100
+                        df['情绪分数'] = sentiment
+                    except Exception:
+                        pass
+
+                rows.append(df)
+            except Exception:
+                continue
+    if rows:
+        all_df = pd.concat(rows, ignore_index=True)
+        # Standardize columns
+        cols = ['日期','上证指数涨跌幅','深证成指涨跌幅','创业板指涨跌幅','上涨家数','下跌家数','平盘家数','涨停家数','跌停家数','A股总成交额(元)','情绪分数']
+        for c in cols:
+            if c not in all_df.columns:
+                all_df[c] = np.nan
+        all_df = all_df[cols]
+        # Drop duplicates
+        all_df = all_df.drop_duplicates(subset=['日期'], keep='last')
+        all_df = all_df.sort_values('日期')
+        all_path = os.path.join(CACHE_DIR, '市场情绪.csv')
+        all_df.to_csv(all_path, index=False, encoding='utf-8-sig')
+        print(f"已更新汇总文件: {all_path}")
 
 def to_num(v):
     return pd.to_numeric(str(v).replace('%','').replace(',',''), errors='coerce')
@@ -315,11 +371,23 @@ def main():
         # 使用综合查询获取所有数据
         market_data = fetch_market_zhishu(d)
         
-        # 如果综合查询失败(关键数据缺失),尝试回退到旧方法(虽然旧方法已被移除,但为了兼容性保留接口调用结构,实际这里主要依赖综合查询)
-        # 注意: fetch_indices 和 fetch_breadth 函数仍保留在文件中,如果需要可以作为备选,但目前逻辑主要依赖 fetch_market_zhishu
-        
+        # 检查关键数据是否缺失，如果缺失则使用 AkShare 补充
+        if pd.isna(market_data.get('上证指数涨跌幅')) or pd.isna(market_data.get('深证成指涨跌幅')) or pd.isna(market_data.get('创业板指涨跌幅')):
+            print("警告: 综合查询未能获取指数数据，尝试使用 AkShare 补充...")
+            try:
+                ak_data = fetch_indices(d)
+                for k, v in ak_data.items():
+                    if pd.notna(v):
+                        market_data[k] = v
+                print("AkShare 补充数据成功")
+            except Exception as e:
+                print(f"AkShare 补充数据失败: {e}")
+
         out = merge_cache(d, market_data)
         print(out.to_string(index=False))
+    
+    # 更新汇总文件
+    update_aggregated_cache()
 
 if __name__ == '__main__':
     main()
