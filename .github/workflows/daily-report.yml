@@ -80,4 +80,29 @@ jobs:
           git push || echo "推送失败"
         continue-on-error: true
 
-      
+      - name: 准备GitHub Pages内容
+        if: always()
+        run: |
+          mkdir -p deploy/reports deploy/data/cache_market
+          cp -r reports/*.md deploy/reports/ 2>/dev/null || true
+          cp data/cache_market/市场情绪.csv deploy/data/cache_market/ 2>/dev/null || true
+          cp web/index.html deploy/index.html
+          
+          # 生成 reports.json 放在 deploy 根目录
+          cd deploy
+          echo -n '{"reports":[' > reports.json
+          ls -1 reports/*.md 2>/dev/null | sort -r | sed 's/.*/"&"/' | paste -sd, >> reports.json || true
+          echo ']}' >> reports.json
+          
+          echo "=== 部署内容 ==="
+          find . -type f
+
+      - name: 部署到GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./deploy
+          publish_branch: gh-pages
+          enable_jekyll: false
+          force_orphan: true
