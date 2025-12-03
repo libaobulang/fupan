@@ -1,19 +1,30 @@
 {
-    "version": 2,
-    "builds": [
-        {
-            "src": "**",
-            "use": "@vercel/static"
-        }
-    ],
-    "routes": [
-        {
-            "src": "/",
-            "dest": "/web/index.html"
-        },
-        {
-            "src": "/reports/(.*)",
-            "dest": "/reports/$1"
-        }
-    ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "cleanUrls": true,
+  "builds": [
+    { "src": "web/**", "use": "@vercel/static" },
+    { "src": "reports/**", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "^/$", "dest": "/web/index.html" },
+    { "src": "^/reports/?$", "dest": "/reports/index.html" },
+    { "src": "^/reports/(.*)$", "dest": "/reports/$1" },
+    { "src": "^/reports\\.json$", "dest": "/reports/reports.json" },
+    { "src": "^/(.*\\.md)$", "dest": "/reports/$1" }
+  ],
+  "headers": [
+    {
+      "source": "/reports/reports.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/reports/(.*).md",
+      "headers": [
+        { "key": "Cache-Control", "value": "max-age=0, must-revalidate" }
+      ]
+    }
+  ]
 }

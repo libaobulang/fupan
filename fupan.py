@@ -1958,14 +1958,14 @@ def generate_daily_analysis_report(df, date, market_data, df_down=None):
             report_parts.append("\n### 行业统计（按涨停家数）")
             report_parts.append(md_table(['行业','涨停家数'], df_to_rows(counts_up_ind)))
         cols_up_list = []
-        for c in ['股票简称','所属同花顺行业','所属概念']:
+        for c in ['股票简称','几天几板','所属同花顺行业','所属概念']:
             if c in df.columns:
                 cols_up_list.append(c)
         if cols_up_list:
             df_up_list = df[cols_up_list].copy()
             if '所属概念' in df_up_list.columns:
                 df_up_list['所属概念数量'] = df_up_list['所属概念'].apply(lambda s: len([c.strip() for c in str(s).split(';') if c.strip()]))
-                cols_up_list = [c for c in ['股票简称','所属同花顺行业','所属概念数量','所属概念'] if c in df_up_list.columns]
+                cols_up_list = [c for c in ['股票简称','几天几板','所属同花顺行业','所属概念数量','所属概念'] if c in df_up_list.columns]
             report_parts.append("\n### 涨停股票列表（含行业与概念）")
             report_parts.append(md_table(cols_up_list, df_to_rows(df_up_list[cols_up_list])))
     except Exception:
@@ -2543,7 +2543,7 @@ def process_date(date):
             with open(out_path(f'每日分析报告{date}.md'), 'w', encoding='utf-8') as f:
                 f.write(report)
             try:
-                dest_dir = r'D:\obsidian\股票\历史记录'
+                dest_dir = r'D:\obsidian\股票\09-历史记录'
                 os.makedirs(dest_dir, exist_ok=True)
                 shutil.copyfile(out_path(f'每日分析报告{date}.md'), os.path.join(dest_dir, f'每日分析报告{date}.md'))
             except Exception:
