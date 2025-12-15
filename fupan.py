@@ -233,6 +233,8 @@ def normalize_columns(df):
         df['最新涨跌幅'] = df['涨跌幅:前复权']
     if '收盘价:不复权' in df.columns and '最新价' not in df.columns:
         df['最新价'] = df['收盘价:不复权']
+    if '涨停原因类别' in df.columns:
+        df['涨停原因类别'] = df['涨停原因类别']
     return df
 
 def coerce_numeric(df, cols):
@@ -1957,17 +1959,56 @@ def generate_daily_analysis_report(df, date, market_data, df_down=None):
             counts_up_ind.columns = ['行业','涨停家数']
             report_parts.append("\n### 行业统计（按涨停家数）")
             report_parts.append(md_table(['行业','涨停家数'], df_to_rows(counts_up_ind)))
-        cols_up_list = []
-        for c in ['股票简称','几天几板','所属同花顺行业','所属概念']:
-            if c in df.columns:
-                cols_up_list.append(c)
-        if cols_up_list:
-            df_up_list = df[cols_up_list].copy()
+        input_cols_map = {
+            '股票简称': '股票简称',
+            '几天几板': '几天几板',
+            '所属同花顺行业': '所属同花顺行业',
+            '涨停原因类别': '涨停原因类别',
+            '首次涨停时间': '首次涨停时间',
+            '涨停开板次数': '开板次数',
+            '所属概念': '所属概念'
+        }
+        
+        # 尝试寻找代码列
+        code_col = None
+        if 'code' in df.columns:
+            code_col = 'code'
+        elif '股票代码' in df.columns:
+            code_col = '股票代码'
+        elif '证券代码' in df.columns:
+             code_col = '证券代码'
+
+        valid_cols = [c for c in input_cols_map.keys() if c in df.columns]
+        if code_col:
+            valid_cols.append(code_col)
+        
+        if valid_cols:
+            df_up_list = df[list(set(valid_cols))].copy()
+            
+            # 处理代码列
+            if code_col:
+                def fmt_code(x):
+                    s = str(x).strip()
+                    if s.startswith('6'):
+                        return 'SH' + s
+                    elif s.startswith('0') or s.startswith('3'):
+                        return 'SZ' + s
+                    return s
+                df_up_list['股票代码'] = df_up_list[code_col].apply(fmt_code)
+
             if '所属概念' in df_up_list.columns:
                 df_up_list['所属概念数量'] = df_up_list['所属概念'].apply(lambda s: len([c.strip() for c in str(s).split(';') if c.strip()]))
-                cols_up_list = [c for c in ['股票简称','几天几板','所属同花顺行业','所属概念数量','所属概念'] if c in df_up_list.columns]
+            
+            df_up_list = df_up_list.rename(columns=input_cols_map)
+            
+            final_cols = []
+            target_order = ['股票简称','股票代码','几天几板','所属同花顺行业','涨停原因类别','首次涨停时间','开板次数','所属概念数量','所属概念']
+            for c in target_order:
+                if c in df_up_list.columns:
+                    final_cols.append(c)
+            
             report_parts.append("\n### 涨停股票列表（含行业与概念）")
-            report_parts.append(md_table(cols_up_list, df_to_rows(df_up_list[cols_up_list])))
+            report_parts.append(md_table(final_cols, df_to_rows(df_up_list[final_cols])))
     except Exception:
         pass
     if isinstance(df_down, pd.DataFrame) and not df_down.empty:
@@ -2426,7 +2467,7 @@ def append_board_net_pct_sections(report_parts, date):
 
 def process_date(date):
     market_data = get_market_sentiment(date)
-    query = f'{date}涨停股票,量比,市盈率,所属概念,所属同花顺行业,非st股票,几天几板,涨停开板次数'
+    query = f'{date}涨停股票,量比,市盈率,所属概念,所属同花顺行业,非st股票,几天几板,涨停开板次数,涨停原因类别'
     try:
         _res = pywencai.get(query=query, loop=True)
     except Exception:
