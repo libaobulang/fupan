@@ -227,6 +227,8 @@ def normalize_columns(df):
         df['所属同花顺行业'] = df['行业']
     if '大单净量' in df.columns and '最新dde大单净额' not in df.columns:
         df['最新dde大单净额'] = df['大单净量']
+    if 'dde大单净额' in df.columns and '最新dde大单净额' not in df.columns:
+        df['最新dde大单净额'] = df['dde大单净额']
     if '涨跌幅' in df.columns and '最新涨跌幅' not in df.columns:
         df['最新涨跌幅'] = df['涨跌幅']
     if '涨跌幅:前复权' in df.columns and '最新涨跌幅' not in df.columns:
@@ -1966,7 +1968,11 @@ def generate_daily_analysis_report(df, date, market_data, df_down=None):
             '涨停原因类别': '涨停原因类别',
             '首次涨停时间': '首次涨停时间',
             '涨停开板次数': '开板次数',
-            '所属概念': '所属概念'
+            '所属概念': '所属概念',
+            '最新价': '股票价格',
+            '流通股': '流通股',
+            '换手率': '换手率',
+            '涨停封单量占成交量比': '封成比'
         }
         
         # 尝试寻找代码列
@@ -2002,7 +2008,7 @@ def generate_daily_analysis_report(df, date, market_data, df_down=None):
             df_up_list = df_up_list.rename(columns=input_cols_map)
             
             final_cols = []
-            target_order = ['股票简称','股票代码','几天几板','所属同花顺行业','涨停原因类别','首次涨停时间','开板次数','所属概念数量','所属概念']
+            target_order = ['股票简称','股票代码','股票价格','几天几板','流通股','换手率','封成比','所属同花顺行业','涨停原因类别','首次涨停时间','开板次数','所属概念数量','所属概念']
             for c in target_order:
                 if c in df_up_list.columns:
                     final_cols.append(c)
@@ -2467,7 +2473,7 @@ def append_board_net_pct_sections(report_parts, date):
 
 def process_date(date):
     market_data = get_market_sentiment(date)
-    query = f'{date}涨停股票,量比,市盈率,所属概念,所属同花顺行业,非st股票,几天几板,涨停开板次数,涨停原因类别'
+    query = f'{date}涨停股票,量比,市盈率,所属概念,所属同花顺行业,非st股票,几天几板,涨停开板次数,涨停原因类别,首次涨停时间,最新价,流通股,换手率,涨停封单量占成交量比,最新dde大单净额,dde大单净额,振幅,涨停封单额,a股市值(不含限售股)'
     try:
         _res = pywencai.get(query=query, loop=True)
     except Exception:
@@ -2502,6 +2508,24 @@ def process_date(date):
         ])
         if 'a股市值(不含限售股)' in df.columns:
             df['a股市值(不含限售股)'] = df['a股市值(不含限售股)'].apply(parse_market_cap)
+            # Calculate Floating Shares (流通股) if missing or empty
+            # Logic: Shares = Market Cap (Excluding Limited) / Price
+            try:
+                if '最新价' in df.columns:
+                    def calc_shares(r):
+                        try:
+                            mcap = float(r.get('a股市值(不含限售股)', 0))
+                            price = float(r.get('最新价', 0))
+                            if price > 0:
+                                val = (mcap / price) / 1e8 # In 100 Millions (亿)
+                                return f"{val:.2f}亿"
+                            return ""
+                        except Exception:
+                            return ""
+                    df['流通股'] = df.apply(calc_shares, axis=1)
+            except Exception:
+                pass
+
         df['涨停日期'] = date
         try:
             hdf = pd.read_csv(os.path.join(os.path.dirname(__file__), '持仓股票.csv'), encoding='utf-8-sig')
@@ -2519,6 +2543,20 @@ def process_date(date):
                 df['持仓'] = False
         except Exception:
             df['持仓'] = False
+        
+        if '持仓' not in df.columns:
+            df['持仓'] = False
+        
+        # Defensive: Ensure critical columns exist to prevent KeyErrors
+        critical_cols = [
+            '最新dde大单净额', '涨停封单量占成交量比', '涨停封单额', 
+            'a股市值(不含限售股)', '量比', '换手率', '振幅', '最新价', '流通股',
+            '涨停开板次数', '连续涨停天数', '市盈率(pe)', '热门概念数量', '所属概念数量'
+        ]
+        for c in critical_cols:
+            if c not in df.columns:
+                df[c] = np.nan
+                
         df = enhance_stock_data(df, market_data, date)
         print('------------------------' + query + '------------------------')
         enhanced_cols = [
@@ -2528,7 +2566,7 @@ def process_date(date):
             'a股市值(不含限售股)', '市值分组', '最新dde大单净额', 
             '换手率', '换手强度', '振幅', '首次涨停时间', '最终涨停时间',
             '涨停原因类别', '涨停封单量', '涨停封单额', '涨停封单量占成交量比', '封单强度',
-            '涨停开板次数', '封板质量', '综合评分', '评分等级',
+            '涨停开板次数', '封板质量', '综合评分', '评分等级', '流通股',
             '市场涨停家数', '市场跌停家数', '市场情绪分数', '当日热门概念', '涨停日期', '持仓'
         ]
         available_cols = [col for col in enhanced_cols if col in df.columns]

@@ -72,3 +72,8 @@ Dockerfile
 patch_*.py
 probe_*.py
 generate_*.py
+
+
+# 所有md和csv文件
+*.md
+*.csv
