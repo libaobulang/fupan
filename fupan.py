@@ -225,10 +225,12 @@ def normalize_columns(df):
         df['所属概念'] = df['所属同花顺概念']
     if '行业' in df.columns and '所属同花顺行业' not in df.columns:
         df['所属同花顺行业'] = df['行业']
-    if '大单净量' in df.columns and '最新dde大单净额' not in df.columns:
-        df['最新dde大单净额'] = df['大单净量']
-    if 'dde大单净额' in df.columns and '最新dde大单净额' not in df.columns:
-        df['最新dde大单净额'] = df['dde大单净额']
+    if '最新dde大单净额' not in df.columns:
+        df['最新dde大单净额'] = np.nan
+    if 'dde大单净额' in df.columns:
+        df['最新dde大单净额'] = df['最新dde大单净额'].fillna(df['dde大单净额'])
+    if '大单净量' in df.columns:
+        df['最新dde大单净额'] = df['最新dde大单净额'].fillna(df['大单净量'])
     if '涨跌幅' in df.columns and '最新涨跌幅' not in df.columns:
         df['最新涨跌幅'] = df['涨跌幅']
     if '涨跌幅:前复权' in df.columns and '最新涨跌幅' not in df.columns:
@@ -1804,7 +1806,9 @@ def generate_daily_analysis_report(df, date, market_data, df_down=None):
                 row = []
                 for c in dataframe.columns:
                     v = r[c]
-                    if isinstance(v, (int, np.integer)):
+                    if pd.isna(v):
+                        row.append("")
+                    elif isinstance(v, (int, np.integer)):
                         row.append(str(int(v)))
                     elif isinstance(v, (float, np.floating)):
                         row.append(f"{float(v):.2f}")
@@ -1899,7 +1903,10 @@ def generate_daily_analysis_report(df, date, market_data, df_down=None):
     
     # 概念分析
     hot_concepts = df['当日热门概念'].iloc[0] if '当日热门概念' in df.columns else 'N/A'
-    hotspot_df = df[df.get('是否主流热点', False) == True]
+    if '是否主流热点' in df.columns:
+        hotspot_df = df[df['是否主流热点'] == True]
+    else:
+        hotspot_df = pd.DataFrame()
     hotspot_cols = [c for c in ['股票简称','热门概念数量','所属概念数量','几天几板','综合评分','评分等级'] if c in hotspot_df.columns]
     hotspot_df = hotspot_df[hotspot_cols].nlargest(20, '综合评分') if '综合评分' in hotspot_df.columns else hotspot_df
 
@@ -1909,7 +1916,9 @@ def generate_daily_analysis_report(df, date, market_data, df_down=None):
             row = []
             for c in dataframe.columns:
                 v = r[c]
-                if isinstance(v, (int, np.integer)):
+                if pd.isna(v):
+                    row.append("")
+                elif isinstance(v, (int, np.integer)):
                     row.append(str(int(v)))
                 elif isinstance(v, (float, np.floating)):
                     row.append(f"{float(v):.2f}")
