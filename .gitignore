@@ -77,3 +77,4 @@ generate_*.py
 # 所有md和csv文件
 *.md
 *.csv
+debug_log.txt
